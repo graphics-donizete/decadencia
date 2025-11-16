@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
 
 #include "skia/include/gpu/ganesh/GrBackendSurface.h"
 #include "skia/include/gpu/ganesh/gl/GrGLDirectContext.h"
@@ -36,20 +37,43 @@ void draw_square(SkCanvas *canvas)
     SkPaint paint;
     paint.setColor(SK_ColorBLUE);
     canvas->drawRect({0, 0, 250, 250}, paint);
+
+    auto [width, height] = canvas->imageInfo().dimensions();
+    canvas->drawRect({width - 250.0f, height - 250.0f, (float)width, (float)height}, paint);
+}
+
+#define WIDTH 1280
+#define HEIGHT 720
+
+static auto inline CreateSurface(auto &context, auto width, auto height)
+{
+    auto target = GrBackendRenderTargets::MakeGL(
+        width, height,
+        0, // sample count
+        0, // stencil bits
+        (GrGLFramebufferInfo){
+            .fFBOID = 0,
+            .fFormat = GL_RGBA8,
+        });
+    return SkSurfaces::WrapBackendRenderTarget(
+        context.get(),
+        target,
+        GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
+        SkColorType::kRGBA_8888_SkColorType,
+        nullptr,
+        nullptr);
 }
 
 int main(int, char **)
 {
-    auto window = sf::RenderWindow(sf::VideoMode({500, 500}), "CMake SFML Project");
-    window.setFramerateLimit(60);
+    auto window = sf::RenderWindow(sf::VideoMode({WIDTH, HEIGHT}), "CMake SFML Project");
+    window.setFramerateLimit(30);
+    window.setVerticalSyncEnabled(true);
+    (void)window.setActive(true);
 
-    // Setup Skia OpenGL context
     sk_sp<const GrGLInterface> interface = GrGLMakeNativeInterface();
     sk_sp<GrDirectContext> context = GrDirectContexts::MakeGL(interface);
-
-    // Define the image properties and create a Skia GPU surface
-    SkImageInfo imageinfo = SkImageInfo::MakeN32Premul(500, 500);
-    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(context.get(), skgpu::Budgeted::kNo, imageinfo);
+    sk_sp<SkSurface> surface = CreateSurface(context, WIDTH, HEIGHT);
 
     while (window.isOpen())
     {
@@ -59,14 +83,20 @@ int main(int, char **)
             {
                 window.close();
             }
+            else if (const auto *resized = event->getIf<sf::Event::Resized>())
+            {
+                std::printf("RESIZE\n");
+                glViewport(0, 0, resized->size.x, resized->size.y);
+                surface = CreateSurface(context, resized->size.x, resized->size.y);
+            }
         }
 
-        (void)window.setActive(true);
+        surface->getCanvas()->clear(SK_ColorDKGRAY);
 
         draw_square(surface->getCanvas());
         draw_line(surface->getCanvas());
 
-        context->flushAndSubmit();
+        context->flush();
 
         window.display();
     }

@@ -9,4 +9,4 @@ include(skia.cmake)
 add_subdirectory(external/SFML)
 
 add_executable(decadencia main.cpp)
-target_link_libraries(decadencia libskia SFML::Graphics)
+target_link_libraries(decadencia libskia SFML::Graphics SFML::Window)
